@@ -40,7 +40,7 @@ pipeline {
             -v "$WORKSPACE:/workspace" \
             -w /workspace \
             node:22-alpine \
-            sh -c 'npm install --no-package-lock --no-audit --no-fund && npm run test:ci'
+            sh -c 'npm_config_cache=/tmp/.npm npm install --no-package-lock --no-audit --no-fund && npm_config_cache=/tmp/.npm npm run test:ci'
         '''
       }
     }
