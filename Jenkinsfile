@@ -121,7 +121,7 @@ pipeline {
           aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
           EXPECTED_IMAGE="$ECR_REPOSITORY_URI:$IMAGE_TAG"
           ACTUAL_IMAGE=""
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 120); do
             ACTUAL_IMAGE=$(kubectl get deployment job-preparation-app -n "$K8S_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
             if [ "$ACTUAL_IMAGE" = "$EXPECTED_IMAGE" ]; then
               break
