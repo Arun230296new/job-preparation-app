@@ -12,6 +12,7 @@ RUN npm install --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 
 COPY src ./src
+COPY public ./public
 
 USER node
 EXPOSE 3000
