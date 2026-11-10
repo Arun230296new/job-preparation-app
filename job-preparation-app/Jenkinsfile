@@ -1,0 +1,80 @@
+pipeline {
+  agent any
+  options { timestamps(); disableConcurrentBuilds() }
+  environment {
+    AWS_REGION = 'ap-southeast-2'
+    ECR_REPOSITORY = 'job-preparation-app'
+    K8S_NAMESPACE = 'job-preparation'
+    IMAGE_TAG = "${BUILD_NUMBER}"
+  }
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+    stage('Install dependencies') {
+      steps { sh 'npm install' }
+    }
+    stage('Automated tests') {
+      steps { sh 'npm run test:ci' }
+    }
+    stage('SonarQube analysis') {
+      steps {
+        withSonarQubeEnv('SonarQube') {
+          sh 'sonar-scanner -Dsonar.projectKey=job-preparation-app -Dsonar.sources=src -Dsonar.tests=tests -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info'
+        }
+      }
+    }
+    stage('SonarQube quality gate') {
+      steps {
+        timeout(time: 5, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+    stage('Build Docker image') {
+      steps { sh 'docker build -t $ECR_REPOSITORY:$IMAGE_TAG .' }
+    }
+    stage('Trivy image scan') {
+      steps { sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL $ECR_REPOSITORY:$IMAGE_TAG' }
+    }
+    stage('Push image to Amazon ECR') {
+      steps {
+        withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+          sh '''
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            ECR_REGISTRY=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+            docker tag ${ECR_REPOSITORY}:${IMAGE_TAG} ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+            docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+          '''
+        }
+      }
+    }
+    stage('Update Argo CD application') {
+      steps {
+        withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
+          sh '''
+            argocd app set job-preparation-app --helm-set image.tag=${IMAGE_TAG} --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" --grpc-web
+            argocd app sync job-preparation-app --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" --grpc-web
+          '''
+        }
+      }
+    }
+    stage('Deployment health check') {
+      steps {
+        withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
+          sh '''
+            aws eks update-kubeconfig --region ${AWS_REGION} --name job-preparation-eks
+            kubectl rollout status deployment/job-preparation-app -n ${K8S_NAMESPACE} --timeout=180s
+            kubectl get pods -n ${K8S_NAMESPACE}
+          '''
+        }
+      }
+    }
+  }
+  post {
+    always { sh 'docker image prune -f || true' }
+    success { echo 'Application pipeline completed successfully.' }
+    failure { echo 'Application pipeline failed. Review the stage logs.' }
+  }
+}

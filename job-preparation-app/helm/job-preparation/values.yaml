@@ -1,0 +1,23 @@
+replicaCount: 2
+image:
+  repository: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.ap-southeast-2.amazonaws.com/job-preparation-app
+  tag: "latest"
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+containerPort: 3000
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+ingress:
+  enabled: true
+  className: alb
+  scheme: internet-facing
+  healthcheckPath: /health
+  host: ""

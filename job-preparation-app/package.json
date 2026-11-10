@@ -1,0 +1,10 @@
+{
+  "name": "job-preparation-app",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {"start": "node src/server.js", "test": "jest --runInBand", "test:ci": "jest --ci --coverage --runInBand"},
+  "engines": {"node": ">=20"},
+  "dependencies": {"express": "^4.21.2"},
+  "devDependencies": {"jest": "^29.7.0", "supertest": "^7.1.1"}
+}
